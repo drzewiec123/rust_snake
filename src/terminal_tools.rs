@@ -13,10 +13,6 @@ pub enum Colour {
     WHITE
 }
 
-pub fn clear() {
-
-}
-
 pub fn jump(x: usize, y: usize) {
     print!("\x1b[{};{}H", x+1, y+1);
 }
