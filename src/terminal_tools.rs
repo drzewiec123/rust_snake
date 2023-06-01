@@ -2,15 +2,15 @@ use std::io::{stdout, Write};
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Colour {
-    RESET = 0,
-    BLACK = 30,
-    RED,
-    GREEN,
-    YELLOW,
-    BLUE,
-    MAGENTA,
-    CYAN,
-    WHITE
+    Reset = 0,
+    Black = 30,
+    Red,
+    Green,
+    Yellow,
+    Blue,
+    Magenta,
+    Cyan,
+    White
 }
 
 pub fn jump(x: usize, y: usize) {
@@ -34,7 +34,7 @@ pub fn set_colour(colour: Colour) {
 }
 
 fn as_bg_colour(colour: Colour) -> u8 {
-    if colour == Colour::RESET {
+    if colour == Colour::Reset {
         0
     } else {
         colour as u8 + 10
