@@ -1,5 +1,6 @@
 mod terminal_tools;
 mod snake_window;
+mod window;
 
 extern crate ncurses;
 
@@ -23,6 +24,9 @@ fn get_pressed_key() -> Option<i32> {
 }
 
 fn main() {
+    window::initialize();
+    window::cleanup();
+    return;
     let win = ncurses::initscr();
     ncurses::refresh();
     ncurses::keypad(win, true);
