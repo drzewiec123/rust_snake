@@ -1,42 +1,7 @@
-use crate::terminal_tools::{self as TL, Colour};
+use crate::window::*;
 use std::vec;
 use std::collections::VecDeque;
 use rand::seq::SliceRandom;
-
-#[derive(Copy, Clone, PartialEq, Eq)]
-enum BrickType {
-    None,
-    Wall,
-    Snake,
-    SnakeHead,
-    Food
-}
-
-#[derive(Copy, Clone, PartialEq, Eq)]
-struct BrickVisuals {
-    character: char,
-    fg_colour: TL::Colour,
-    bg_colour: TL::Colour
-}
-
-impl BrickVisuals {
-    pub fn apply(&self) {
-        TL::set_colour(self.fg_colour);
-        TL::set_bg_colour(self.bg_colour);
-    }
-}
-
-static INITIAL_SIZE: usize = 4;
-
-fn get_brick_visuals(category: BrickType) -> BrickVisuals {
-    match category {
-        BrickType::None      => BrickVisuals { character: ' ', fg_colour: TL::Colour::Black,  bg_colour: TL::Colour::Black },
-        BrickType::Wall      => BrickVisuals { character: '█', fg_colour: TL::Colour::Blue,   bg_colour: TL::Colour::Black },
-        BrickType::Snake     => BrickVisuals { character: '%', fg_colour: TL::Colour::Red,    bg_colour: TL::Colour::Black },
-        BrickType::SnakeHead => BrickVisuals { character: '%', fg_colour: TL::Colour::Yellow, bg_colour: TL::Colour::Black },
-        BrickType::Food      => BrickVisuals { character: '*', fg_colour: TL::Colour::Green,  bg_colour: TL::Colour::Black },
-    }
-}
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Direction {
@@ -44,6 +9,60 @@ pub enum Direction {
     Right,
     Down,
     Left
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum BrickType {
+    None,
+    Wall,
+    Snake(Direction),
+    SnakeHead(Direction),
+    Food
+}
+
+static INITIAL_SIZE: usize = 4;
+
+struct VisualsRegistry {
+    none: PrintableCharacter,
+    wall: PrintableCharacter,
+    food: PrintableCharacter,
+    colors_head: ColorPair,
+    colors_body: ColorPair,
+    colors_points: ColorPair,
+    colors_ending: ColorPair,
+}
+
+impl VisualsRegistry {
+    fn build() -> Option<VisualsRegistry> {
+        Some(VisualsRegistry {
+            none:       PrintableCharacter::new(' ', ColorPair::new(ncurses::COLOR_BLACK, ncurses::COLOR_BLACK)?.into()),
+            wall:       PrintableCharacter::new(' ', ColorPair::new(ncurses::COLOR_BLACK, ncurses::COLOR_BLUE )?.into()),
+            food:       PrintableCharacter::new('*', ColorPair::new(ncurses::COLOR_GREEN ,ncurses::COLOR_BLACK)?.into()),
+            colors_head: ColorPair::new(ncurses::COLOR_RED,    ncurses::COLOR_BLACK)?,
+            colors_body: ColorPair::new(ncurses::COLOR_YELLOW, ncurses::COLOR_BLACK)?,
+            colors_points: ColorPair::new(ncurses::COLOR_MAGENTA, ncurses::COLOR_WHITE)?,
+            colors_ending: ColorPair::new(ncurses::COLOR_CYAN, ncurses::COLOR_WHITE)?,
+        })
+    }
+
+    fn get_char_from_direction(dir: Direction) -> char {
+        match dir {
+            Direction::Up => '^',
+            Direction::Right => '>',
+            Direction::Down => 'v',
+            Direction::Left => '<',
+        }
+    }
+
+    fn get(&self, category: BrickType) -> PrintableCharacter {
+        match category {
+            BrickType::None => self.none,
+            BrickType::Wall => self.wall,
+            BrickType::Snake(dir) => PrintableCharacter::new(Self::get_char_from_direction(dir), self.colors_body.into()),
+            BrickType::SnakeHead(dir) => PrintableCharacter::new(Self::get_char_from_direction(dir), self.colors_head.into()),
+            BrickType::Food => self.food,
+        }
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -61,12 +80,14 @@ impl Position {
     }
 }
 pub struct SnakeWindow {
+    win: Window,
     x_size: usize,
     y_size: usize,
     facing: Direction,
     last_step: Direction,
     board: Vec::<Vec::<BrickType>>,
-    snake: VecDeque<Position>
+    snake: VecDeque<Position>,
+    visuals: VisualsRegistry,
 }
 
 impl SnakeWindow {
@@ -83,71 +104,49 @@ impl SnakeWindow {
 
     fn place_snake(&mut self, x: usize, y: usize) {
         for i in (x..x + INITIAL_SIZE).rev() {
-            self.board[i][y] = BrickType::Snake;
+            self.board[i][y] = BrickType::Snake(Direction::Up);
             self.snake.push_front(Position(i, y));
         }
-        self.board[x][y] = BrickType::SnakeHead;
+        self.board[x][y] = BrickType::SnakeHead(Direction::Up);
     }
 
     fn get_head(&self) -> Position {
         *self.snake.front().unwrap()
     }
 
-    pub fn new(x_size: usize, y_size: usize) -> Self {
+    pub fn new(x_size: usize, y_size: usize) -> Option<SnakeWindow> {
         let mut sw = SnakeWindow {
+            win: Window::new(0, 0, x_size as i32 + 2, y_size as i32 + 8),
             x_size: x_size,
             y_size: y_size,
             facing: Direction::Up,
             last_step: Direction::Up,
             board: Self::create_board(x_size, y_size),
-            snake: VecDeque::new()
+            snake: VecDeque::new(),
+            visuals: VisualsRegistry::build()?
         };
         sw.place_snake(x_size / 2, y_size / 2);
         let pos = sw.find_valid_food_spawn().unwrap();
         sw.board[pos.0][pos.1] = BrickType::Food;
-        sw
+        Some(sw)
     }
 
     fn end_drawing_session(&self) {
-        TL::jump(0, self.y_size);
-        TL::flush();
+        self.win.refresh();
     }
 
     fn change_brick(&mut self, Position(x, y): Position, category: BrickType) {
         self.board[x][y] = category;
-        let visuals = get_brick_visuals(category);
-        visuals.apply();
-        TL::jump(x, y);
-        TL::put_character(self.get_character_for(category, visuals));
-    }
-
-    fn get_character_for(&self, brick: BrickType, visuals: BrickVisuals) -> char {
-        if brick != BrickType::SnakeHead {
-            visuals.character
-        } else {
-            match self.facing {
-                Direction::Up => '^',
-                Direction::Right => '>',
-                Direction::Down => 'v',
-                Direction::Left => '<',
-            }
-        }
+        let visual = self.visuals.get(category);
+        self.win.move_put(x as i32, y as i32, visual);
     }
 
     pub fn draw_board(&self) {
-        let mut visual = get_brick_visuals(self.board[0][0]);
-        visual.apply();
-        TL::jump(0, 0);
-        for row in &self.board {
+        for (i, row) in self.board.iter().enumerate() {
+            self.win.move_cur(i as i32, 0);
             for brick in row {
-                let new_visual = get_brick_visuals(*brick);
-                if new_visual != visual {
-                    visual = new_visual;
-                    visual.apply();
-                }
-                TL::put_character(self.get_character_for(*brick, visual));
+                self.win.put_character(self.visuals.get(*brick));
             }
-            TL::newline();
         }
         self.draw_points();
         self.end_drawing_session();
@@ -156,7 +155,7 @@ impl SnakeWindow {
     pub fn turn(&mut self, dir: Direction) {
         if (dir as u8) != (self.last_step as u8 + 2) % 4 {
             self.facing = dir;
-            self.change_brick(self.get_head(), BrickType::SnakeHead);
+            self.change_brick(self.get_head(), BrickType::SnakeHead(dir));
             self.end_drawing_session();
         }
     }
@@ -168,8 +167,8 @@ impl SnakeWindow {
         }
 
         self.snake.push_front(new_pos);
-        self.change_brick(new_pos, BrickType::SnakeHead);
-        self.change_brick(self.snake[1], BrickType::Snake);
+        self.change_brick(new_pos, BrickType::SnakeHead(self.facing));
+        self.change_brick(self.snake[1], BrickType::Snake(self.facing));
     }
 
     fn find_valid_food_spawn(&mut self) -> Option<Position> {
@@ -192,17 +191,19 @@ impl SnakeWindow {
     }
 
     fn draw_points(&self) {
-        TL::jump(2, self.y_size);
-        BrickVisuals{character: ' ', fg_colour: Colour::Magenta, bg_colour: Colour::White}.apply();
-        print!(" {} ", self.snake.len() - INITIAL_SIZE);        
+        let points_str = format!(" {} ", self.snake.len() - INITIAL_SIZE);
+        self.win.set_attr(self.visuals.colors_points.into());
+        self.win.move_print(2, self.y_size as i32 + 1, &points_str);
+        self.win.clear_attr();
     }
 
     pub fn draw_ending_message(&self) {
-        TL::jump(self.x_size + 1, 0);
-        BrickVisuals{character: ' ', fg_colour: Colour::Cyan, bg_colour: Colour::White}.apply();
-        println!(" game over, your score: {} ", self.snake.len() - INITIAL_SIZE);
-        TL::jump(self.x_size + 2, 0);
-        println!(" press any key to continue ");
+        let game_over = format!(" game over, your score: {} ", self.snake.len() - INITIAL_SIZE);
+        self.win.set_attr(self.visuals.colors_ending.into());
+        self.win.move_print(self.x_size as i32, 0, &game_over);
+        self.win.move_print(self.x_size as i32 + 1, 0, " press any key to continue ");
+        self.win.clear_attr();
+        self.end_drawing_session();
     }
 
     pub fn step(&mut self) -> bool {
@@ -216,8 +217,8 @@ impl SnakeWindow {
                 true
             },
             BrickType::Wall => false,
-            BrickType::Snake => false,
-            BrickType::SnakeHead => false,
+            BrickType::Snake(_) => false,
+            BrickType::SnakeHead(_) => false,
             BrickType::Food => {
                 self.step_snake(new_pos, true);
                 self.draw_points();

@@ -1,4 +1,3 @@
-mod terminal_tools;
 mod snake_window;
 mod window;
 
@@ -25,15 +24,21 @@ fn get_pressed_key() -> Option<i32> {
 
 fn main() {
     window::initialize();
-    let win = ncurses::initscr();
-    ncurses::refresh();
-    ncurses::keypad(win, true);
+    ncurses::keypad(ncurses::stdscr(), true);
     let wait_time = time::Duration::from_millis(300);
 
-    let mut game_window = SnakeWindow::new(15, 30);
+    let game_window = SnakeWindow::new(15, 30);
+    if game_window.is_none() {
+        println!("Could not initialize game board :(");
+        ncurses::endwin();
+        return;
+    }
+
+    let mut game_window = game_window.unwrap();
     game_window.draw_board();
+
     ncurses::getch();
-    ncurses::nodelay(win, true);
+    ncurses::nodelay(ncurses::stdscr(), true);
     ncurses::timeout(0);
     loop {
         thread::sleep(wait_time);
@@ -54,7 +59,7 @@ fn main() {
     game_window.draw_ending_message();
     while ncurses::getch() != ncurses::ERR {}
     ncurses::timeout(-1);
-    ncurses::nodelay(win, false);
+    ncurses::nodelay(ncurses::stdscr(), false);
     ncurses::getch();
-    ncurses::endwin();
+    window::cleanup();
 }

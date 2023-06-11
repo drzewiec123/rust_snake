@@ -6,15 +6,12 @@ use std::sync::atomic::{AtomicI32, Ordering};
 pub fn initialize() {
     initscr();
     start_color();
+    curs_set(CURSOR_VISIBILITY::CURSOR_INVISIBLE);
     refresh();
 }
 
 pub fn cleanup() {
     endwin();
-}
-
-pub fn clear_attributes() {
-    attrset(A_NORMAL());
 }
 
 static _NEXT_FREE_COLOR_ID: AtomicI32 = AtomicI32::new(1);
@@ -33,10 +30,6 @@ impl ColorPair {
             init_pair(assigned_id as i16, fg, bg);
             Some(ColorPair{id: assigned_id as i16})
         }
-    }
-
-    pub fn apply(&self) {
-        attr_on(COLOR_PAIR(self.id));
     }
 }
 
@@ -89,7 +82,7 @@ pub struct Window {
 impl Window {
 
     pub fn new(x: i32, y:i32, x_size: i32, y_size: i32) -> Window {
-        let w = Window { win: newwin(y_size, x_size, y, x) };
+        let w = Window { win: newwin(x_size, y_size, x, y) };
         w
     }
 
@@ -98,16 +91,15 @@ impl Window {
     }
 
     pub fn move_cur(&self, x: i32, y: i32) {
-        wmove(self.win, y, x);
+        wmove(self.win, x, y);
     }
 
     pub fn print(&self, s: &str) {
-        wprintw(self.win, s);
+        waddstr(self.win, s);
     }
 
     pub fn move_print(&self, x: i32, y: i32, s: &str) {
-        self.move_cur(x, y);
-        self.print(s);
+        mvwaddstr(self.win, x, y, s);
     }
 
     pub fn put_character(&self, ch: PrintableCharacter) {
@@ -117,6 +109,22 @@ impl Window {
     pub fn move_put(&self, x: i32, y: i32, ch: PrintableCharacter) {
         self.move_cur(x, y);
         self.put_character(ch);
+    }
+
+    pub fn apply_attr(&self, attr: Attributes) {
+        wattr_on(self.win, attr.value);
+    }
+
+    pub fn disable_attr(&self, attr: Attributes) {
+        wattr_off(self.win, attr.value);
+    }
+
+    pub fn clear_attr(&self) {
+        wattrset(self.win, A_NORMAL());
+    }
+
+    pub fn set_attr(&self, attr: Attributes) {
+        wattrset(self.win, attr.value);
     }
 
 }
