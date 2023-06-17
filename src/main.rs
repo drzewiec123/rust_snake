@@ -1,5 +1,6 @@
 mod snake_window;
 mod window;
+mod board_file;
 
 extern crate ncurses;
 
@@ -27,7 +28,7 @@ fn main() {
     ncurses::keypad(ncurses::stdscr(), true);
     let wait_time = time::Duration::from_millis(300);
 
-    let game_window = SnakeWindow::new(15, 30);
+    let game_window = SnakeWindow::new_default(15, 30);
     if game_window.is_none() {
         println!("Could not initialize game board :(");
         ncurses::endwin();
