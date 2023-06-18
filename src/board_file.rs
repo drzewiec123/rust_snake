@@ -1,4 +1,5 @@
-use std::io::Read;
+use std::{fs::File, io::BufRead};
+use std::io::BufReader;
 use crate::snake_window::{Direction, Position, Board, BrickType};
 
 #[derive(Copy, Clone)]
@@ -20,7 +21,7 @@ fn from_primitive(x: u8) -> Option<Direction> {
 }
 
 impl Bar {
-    pub fn from_line(line: String) -> Option<Bar> {
+    fn from_line(line: String) -> Option<Bar> {
         let mut iter = line.split_whitespace().into_iter();
         let bg = iter.next()?;
         if bg.len() != 1 {
@@ -45,6 +46,9 @@ impl BoardBuilder {
             let head = self.board.get_head();
             self.board[head] = BrickType::SnakeHead(self.board.facing);
         }
+        let pos = self.board.find_valid_food_spawn().unwrap();
+        self.board[pos] = BrickType::Food;
+        self.board.initial_size = self.board.snake.len();
         self.board
     }
 
@@ -71,7 +75,29 @@ impl BoardBuilder {
         };
     }
 
-    fn new(x_size: usize, y_size: usize) -> Option<BoardBuilder> {
-        Some(BoardBuilder { board: Board::new_empty(x_size, y_size) })
+    fn new(x_size: usize, y_size: usize) -> BoardBuilder {
+        BoardBuilder { board: Board::new_empty(x_size, y_size) }
     }
+}
+
+pub fn from_file(file_path: &str) -> Option<Board> {
+    let file = File::open(file_path).ok()?;
+    let reader = BufReader::new(file);
+    let mut lines_iter = reader.lines();
+
+    let line = lines_iter.next()?.ok()?;
+    let mut iter = line.split_whitespace();
+    let x_size: usize = iter.next()?.parse().ok()?;
+    let y_size: usize = iter.next()?.parse().ok()?;
+
+    let mut builder = BoardBuilder::new(x_size, y_size);
+    for line in lines_iter {
+        let line = line.ok()?;
+        if line.is_empty() {
+            continue;
+        }
+        let bar = Bar::from_line(line)?;
+        builder.add_bar(bar);
+    }
+    Some(builder.build())
 }

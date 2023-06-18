@@ -21,8 +21,6 @@ pub enum BrickType {
     Food
 }
 
-static INITIAL_SIZE: usize = 4;
-
 struct VisualsRegistry {
     none: PrintableCharacter,
     wall: PrintableCharacter,
@@ -88,6 +86,7 @@ pub struct Board {
     pub last_step: Direction,
     board: Vec::<Vec::<BrickType>>,
     pub snake: VecDeque<Position>,
+    pub initial_size: usize,
 }
 
 impl Index<usize> for Board {
@@ -127,20 +126,22 @@ impl Board {
             last_step: Direction::Up,
             board: vec![vec![BrickType::None; y_size]; x_size],
             snake: VecDeque::new(),
+            initial_size: 0
         }
     }
 
     pub fn new_default(x_size: usize, y_size: usize) -> Board {
         let mut b = Self::new_empty(x_size, y_size);
         b.create_wall_outline();
+        b.initial_size = 4;
         b.place_snake(x_size / 2, y_size / 2);
         let pos = b.find_valid_food_spawn().unwrap();
-        b[pos.0][pos.1] = BrickType::Food;
+        b[pos] = BrickType::Food;
         b
     }
 
     fn place_snake(&mut self, x: usize, y: usize) {
-        for i in (x..x + INITIAL_SIZE).rev() {
+        for i in (x..x + self.initial_size).rev() {
             self[i][y] = BrickType::Snake(Direction::Up);
             self.snake.push_front(Position(i, y));
         }
@@ -156,7 +157,7 @@ impl Board {
         };
     }
 
-    fn find_valid_food_spawn(&mut self) -> Option<Position> {
+    pub fn find_valid_food_spawn(&mut self) -> Option<Position> {
         let mut empty_bricks = Vec::<Position>::new();
         for x in 0..self.board.len() {
             for y in 0..self.board[x].len() {
@@ -172,14 +173,6 @@ impl Board {
         *self.snake.front().unwrap()
     }
 
-    fn x_size(&self) -> usize {
-        self.x_size
-    }
-
-    fn y_size(&self) -> usize {
-        self.y_size
-    }
-
 }
 
 pub struct SnakeWindow {
@@ -191,9 +184,13 @@ pub struct SnakeWindow {
 impl SnakeWindow {
 
     pub fn new_default(x_size: usize, y_size: usize) -> Option<SnakeWindow> {
+        Self::new(Board::new_default(x_size, y_size))
+    }
+
+    pub fn new(board: Board) -> Option<SnakeWindow> {
         Some(SnakeWindow {
-            win: Window::new(0, 0, x_size as i32 + 2, y_size as i32 + 8),
-            board: Board::new_default(x_size, y_size),
+            win: Window::new(0, 0, board.x_size as i32 + 2, board.y_size as i32 + 8),
+            board: board,
             visuals: VisualsRegistry::build()?
         })
     }
@@ -209,7 +206,7 @@ impl SnakeWindow {
     }
 
     pub fn draw_board(&self) {
-        for i in 0..self.board.x_size - 1 {
+        for i in 0..self.board.x_size {
             self.win.move_cur(i as i32, 0);
             for brick in &self.board[i] {
                 self.win.put_character(self.visuals.get(*brick));
@@ -246,14 +243,14 @@ impl SnakeWindow {
     }
 
     fn draw_points(&self) {
-        let points_str = format!(" {} ", self.board.snake.len() - INITIAL_SIZE);
+        let points_str = format!(" {} ", self.board.snake.len() - self.board.initial_size);
         self.win.set_attr(self.visuals.colors_points.into());
         self.win.move_print(2, self.board.y_size as i32 + 1, &points_str);
         self.win.clear_attr();
     }
 
     pub fn draw_ending_message(&self) {
-        let game_over = format!(" game over, your score: {} ", self.board.snake.len() - INITIAL_SIZE);
+        let game_over = format!(" game over, your score: {} ", self.board.snake.len() - self.board.initial_size);
         self.win.set_attr(self.visuals.colors_ending.into());
         self.win.move_print(self.board.x_size as i32, 0, &game_over);
         self.win.move_print(self.board.x_size as i32 + 1, 0, " press any key to continue ");
@@ -265,7 +262,7 @@ impl SnakeWindow {
         self.board.last_step = self.board.facing;
         let new_pos = self.board.get_head().move_dir(self.board.last_step);
 
-        match self.board[new_pos.0][new_pos.1] {
+        match self.board[new_pos] {
             BrickType::None => {
                 self.step_snake(new_pos, false);
                 self.end_drawing_session();

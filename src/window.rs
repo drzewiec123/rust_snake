@@ -2,17 +2,28 @@ extern crate ncurses;
 
 use ncurses::*;
 use std::sync::atomic::{AtomicI32, Ordering};
+use std::ops::Drop;
 
-pub fn initialize() {
+pub struct NcursesContext {}
+
+pub fn initialize() -> NcursesContext {
     initscr();
     start_color();
     curs_set(CURSOR_VISIBILITY::CURSOR_INVISIBLE);
     refresh();
+    NcursesContext{}
 }
 
 pub fn cleanup() {
     endwin();
 }
+
+impl Drop for NcursesContext {
+    fn drop(&mut self) {
+        cleanup();
+    }
+}
+
 
 static _NEXT_FREE_COLOR_ID: AtomicI32 = AtomicI32::new(1);
 

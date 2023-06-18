@@ -4,7 +4,7 @@ mod board_file;
 
 extern crate ncurses;
 
-use std::{thread, time};
+use std::{thread, time, env};
 use crate::snake_window::SnakeWindow;
 
 fn get_pressed_key() -> Option<i32> {
@@ -24,11 +24,22 @@ fn get_pressed_key() -> Option<i32> {
 }
 
 fn main() {
-    window::initialize();
+    let _context = window::initialize();
     ncurses::keypad(ncurses::stdscr(), true);
     let wait_time = time::Duration::from_millis(300);
 
-    let game_window = SnakeWindow::new_default(15, 30);
+    let game_window: Option<SnakeWindow>;
+    if env::args().len() < 2 {
+        game_window = SnakeWindow::new_default(15, 30);
+    } else {
+        let board = board_file::from_file(&env::args().nth(1).unwrap());
+        if board.is_none() {
+            game_window = None;
+        } else {
+            game_window = SnakeWindow::new(board.unwrap())
+        }
+    }
+
     if game_window.is_none() {
         println!("Could not initialize game board :(");
         ncurses::endwin();
@@ -58,9 +69,10 @@ fn main() {
         }
     }
     game_window.draw_ending_message();
+    
     while ncurses::getch() != ncurses::ERR {}
+    
     ncurses::timeout(-1);
     ncurses::nodelay(ncurses::stdscr(), false);
     ncurses::getch();
-    window::cleanup();
 }
