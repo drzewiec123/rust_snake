@@ -1,17 +1,28 @@
 extern crate ncurses;
 
 use ncurses::*;
+use crate::visuals::VisualsRegistry;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::ops::Drop;
 
-pub struct NcursesContext {}
+pub struct NcursesContext {
+    visuals: VisualsRegistry,
+}
 
-pub fn initialize() -> NcursesContext {
+impl NcursesContext {
+    pub fn get_visuals(&self) -> &VisualsRegistry {
+        &self.visuals
+    }
+}
+
+pub fn initialize() -> Option<NcursesContext> {
     initscr();
     start_color();
     curs_set(CURSOR_VISIBILITY::CURSOR_INVISIBLE);
     refresh();
-    NcursesContext{}
+    Some(NcursesContext{
+        visuals: VisualsRegistry::build()?
+    })
 }
 
 pub fn cleanup() {

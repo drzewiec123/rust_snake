@@ -1,5 +1,7 @@
 mod snake_window;
 mod window;
+mod board;
+mod visuals;
 mod board_file;
 
 extern crate ncurses;
@@ -24,19 +26,23 @@ fn get_pressed_key() -> Option<i32> {
 }
 
 fn main() {
-    let _context = window::initialize();
+    let context = window::initialize();
+    if context.is_none() {
+        println!("Error: Could not initialize curses");
+    }
+    let context = context.unwrap();
     ncurses::keypad(ncurses::stdscr(), true);
     let wait_time = time::Duration::from_millis(300);
 
     let game_window: Option<SnakeWindow>;
     if env::args().len() < 2 {
-        game_window = SnakeWindow::new_default(15, 30);
+        game_window = SnakeWindow::new_default(&context, 15, 30);
     } else {
         let board = board_file::from_file(&env::args().nth(1).unwrap());
         if board.is_none() {
             game_window = None;
         } else {
-            game_window = SnakeWindow::new(board.unwrap())
+            game_window = SnakeWindow::new(&context, board.unwrap())
         }
     }
 
@@ -56,13 +62,7 @@ fn main() {
         thread::sleep(wait_time);
         let mut key: Option<i32>;
         while { key = get_pressed_key(); key.is_some() } {
-            match key.unwrap() {
-                ncurses::KEY_UP    => { game_window.turn(snake_window::Direction::Up);    }
-                ncurses::KEY_RIGHT => { game_window.turn(snake_window::Direction::Right); }
-                ncurses::KEY_DOWN  => { game_window.turn(snake_window::Direction::Down);  }
-                ncurses::KEY_LEFT  => { game_window.turn(snake_window::Direction::Left);  }
-                _ => {}
-            }
+            game_window.handle_keypress(key.unwrap());
         }
         if !game_window.step() {
             break;

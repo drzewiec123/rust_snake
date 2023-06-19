@@ -1,6 +1,6 @@
+use crate::board::*;
 use std::{fs::File, io::BufRead};
 use std::io::BufReader;
-use crate::snake_window::{Direction, Position, Board, BrickType};
 
 #[derive(Copy, Clone)]
 struct Bar {
