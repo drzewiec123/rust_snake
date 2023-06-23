@@ -29,8 +29,8 @@ impl SnakeWindow<'_> {
     }
 
     fn change_brick(&mut self, Position(x, y): Position, category: BrickType) {
+        let visual = self.visuals.get(&category);
         self.board[x][y] = category;
-        let visual = self.visuals.get(category);
         self.win.move_put(x as i32, y as i32, visual);
     }
 
@@ -38,7 +38,7 @@ impl SnakeWindow<'_> {
         for i in 0..self.board.x_size() {
             self.win.move_cur(i as i32, 0);
             for brick in &self.board[i] {
-                self.win.put_character(self.visuals.get(*brick));
+                self.win.put_character(self.visuals.get(brick));
             }
         }
         self.draw_points();
@@ -70,6 +70,7 @@ impl SnakeWindow<'_> {
         }
 
         self.board.snake.push_front(new_pos);
+        self.board.snake_pos = new_pos;
         self.change_brick(new_pos, BrickType::SnakeHead(self.board.facing));
         self.change_brick(self.board.snake[1], BrickType::Snake(self.board.facing));
     }
@@ -101,7 +102,8 @@ impl SnakeWindow<'_> {
         self.board.last_step = self.board.facing;
         let new_pos = self.board.get_head().move_dir(self.board.last_step);
 
-        match self.board[new_pos] {
+        let brick = &self.board.board[new_pos.0][new_pos.1];
+        match brick {
             BrickType::None => {
                 self.step_snake(new_pos, false);
                 self.end_drawing_session();
@@ -116,6 +118,11 @@ impl SnakeWindow<'_> {
                 self.spawn_food();
                 self.end_drawing_session();
                 true
+            },
+            BrickType::Portal(data) => {
+                self.board.snake_pos = data.destination;
+                self.board.facing = Direction::from_primitive(self.board.facing as u8 + data.rotation);
+                self.step()
             }
         }
     }

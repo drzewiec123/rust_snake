@@ -11,17 +11,48 @@ pub enum Direction {
     Left
 }
 
+impl Direction {
+
+    pub fn from_primitive(x: u8) -> Direction {
+        let x = x % 4;
+        match x {
+            x if x == Direction::Up as u8 => Direction::Up,
+            x if x == Direction::Right as u8 => Direction::Right,
+            x if x == Direction::Down as u8 => Direction::Down,
+            x if x == Direction::Left as u8 => Direction::Left,
+            _ => Direction::Up
+        }
+    }
+
+    pub fn rotate(&self, rot: u8) -> Direction {
+        Direction::from_primitive(*self as u8 + rot)
+    }
+
+    pub fn mirror(&self) -> Direction {
+        Direction::from_primitive(*self as u8 + 2)
+    }
+
+}
+
 #[derive(Copy, Clone, PartialEq, Eq)]
+pub struct Position(pub usize, pub usize);
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub struct PortalData {
+    pub destination: Position,
+    pub colour: i16,
+    pub rotation: u8,
+}
+
+#[derive(Clone, PartialEq, Eq)]
 pub enum BrickType {
     None,
     Wall,
     Snake(Direction),
     SnakeHead(Direction),
-    Food
+    Food,
+    Portal(Box<PortalData>),
 }
-
-#[derive(Copy, Clone)]
-pub struct Position(pub usize, pub usize);
 
 impl Position {
     pub fn move_dir(&self, dir: Direction) -> Position {
@@ -40,7 +71,8 @@ pub struct Board {
     y_size: usize,
     pub facing: Direction,
     pub last_step: Direction,
-    board: Vec::<Vec::<BrickType>>,
+    pub board: Vec::<Vec::<BrickType>>,
+    pub snake_pos: Position,
     pub snake: VecDeque<Position>,
     pub initial_size: usize,
 }
@@ -81,6 +113,7 @@ impl Board {
             facing: Direction::Up,
             last_step: Direction::Up,
             board: vec![vec![BrickType::None; y_size]; x_size],
+            snake_pos: Position(0, 0),
             snake: VecDeque::new(),
             initial_size: 0
         }
@@ -101,6 +134,7 @@ impl Board {
             self[i][y] = BrickType::Snake(Direction::Up);
             self.snake.push_front(Position(i, y));
         }
+        self.snake_pos = Position(x, y);
         self.board[x][y] = BrickType::SnakeHead(Direction::Up);
     }
 
@@ -126,7 +160,7 @@ impl Board {
     }
 
     pub fn get_head(&self) -> Position {
-        *self.snake.front().unwrap()
+        self.snake_pos
     }
 
     pub fn x_size(&self) -> usize {

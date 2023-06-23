@@ -3,36 +3,116 @@ use std::{fs::File, io::BufRead};
 use std::io::BufReader;
 
 #[derive(Copy, Clone)]
-struct Bar {
-    type_id: char,
+struct SimpleBar {
     pos: Position,
     len: usize,
     dir: Direction,
 }
 
-fn from_primitive(x: u8) -> Option<Direction> {
-    match x {
-        x if x == Direction::Up as u8 => Some(Direction::Up),
-        x if x == Direction::Right as u8 => Some(Direction::Right),
-        x if x == Direction::Down as u8 => Some(Direction::Down),
-        x if x == Direction::Left as u8 => Some(Direction::Left),
-        _ => None
-    }
-}
-
-impl Bar {
-    fn from_line(line: String) -> Option<Bar> {
-        let mut iter = line.split_whitespace().into_iter();
-        let bg = iter.next()?;
-        if bg.len() != 1 {
-            return None
-        }
-        let type_id: char = bg.chars().next()?;
+impl SimpleBar {
+    pub fn from_line<'a, I>(iter: &mut I) -> Option<SimpleBar> 
+    where
+        I: Iterator<Item = &'a str>
+    {
         let x: usize = iter.next()?.parse().ok()?;
         let y: usize = iter.next()?.parse().ok()?;
         let len: usize = iter.next()?.parse().ok()?;
-        let dir: Direction = from_primitive(iter.next()?.parse().ok()?)?;
-        Some(Bar { type_id, pos: Position(x, y), len, dir })
+        let dir: Direction = Direction::from_primitive(iter.next()?.parse().ok()?);
+        Some(SimpleBar { pos: Position(x, y), len, dir })
+    }
+}
+
+struct WallBar {
+    base: SimpleBar
+}
+
+impl WallBar {
+    pub fn from_line<'a, I>(iter: &mut I) -> Option<WallBar> 
+    where
+        I: Iterator<Item = &'a str>
+    {
+        Some(WallBar { base: SimpleBar::from_line(iter)? })
+    }
+
+    pub fn apply(&self, board: &mut Board) {
+        let mut pos = self.base.pos;
+        for _ in 0..self.base.len {
+            board[pos] = BrickType::Wall;
+            pos = pos.move_dir(self.base.dir);
+        }
+    }
+}
+
+struct SnakeBar {
+    base: SimpleBar
+}
+
+impl SnakeBar {
+    pub fn from_line<'a, I>(iter: &mut I) -> Option<SnakeBar> 
+    where
+        I: Iterator<Item = &'a str>
+    {
+        Some(SnakeBar { base: SimpleBar::from_line(iter)? })
+    }
+
+    pub fn apply(&self, board: &mut Board) {
+        let mut pos = self.base.pos;
+        for _ in 0..self.base.len {
+            board[pos] = BrickType::Snake(self.base.dir);
+            board.snake.push_front(pos);
+            pos = pos.move_dir(self.base.dir);
+        }
+        board.facing = self.base.dir;
+        board.last_step = self.base.dir;
+    }
+}
+
+struct PortalBar {
+    base: SimpleBar,
+    destination: Position,
+    rotation: u8,
+    mirror: bool,
+    colour: i16,
+}
+
+impl PortalBar {
+    pub fn from_line<'a, I>(iter: &mut I) -> Option<PortalBar> 
+    where
+        I: Iterator<Item = &'a str>
+    {
+        let basic_bar = SimpleBar::from_line(iter)?;
+        let x: usize = iter.next()?.parse().ok()?;
+        let y: usize = iter.next()?.parse().ok()?;
+        let rotation: u8 = iter.next()?.parse().ok()?;
+        let mirror: u8 = iter.next()?.parse().ok()?;
+        let colour: i16 = iter.next()?.parse().ok()?;
+
+        Some(PortalBar {
+            base: basic_bar,
+            destination: Position(x, y),
+            mirror: mirror != 0,
+            rotation: rotation % 4,
+            colour,
+        })
+    }
+
+    pub fn apply(&self, board: &mut Board) {
+        let mut source_pos = self.base.pos;
+        let mut dest_pos = self.destination;
+        let source_dir = self.base.dir;
+        let dest_dir = self.base.dir.rotate(self.rotation);
+        let out_rotation = if self.mirror { self.rotation + 2 } else { self.rotation };
+        for _ in 0..self.base.len {
+            board[source_pos] = BrickType::Portal(
+                Box::new(PortalData {
+                    destination: dest_pos,
+                    colour: self.colour,
+                    rotation: out_rotation
+                })
+            );
+            source_pos = source_pos.move_dir(source_dir);
+            dest_pos = dest_pos.move_dir(dest_dir);
+        }
     }
 }
 
@@ -43,7 +123,8 @@ struct BoardBuilder {
 impl BoardBuilder {
     fn build(mut self) -> Board {
         if !self.board.snake.is_empty() {
-            let head = self.board.get_head();
+            let head = *self.board.snake.front().unwrap();
+            self.board.snake_pos = head;
             self.board[head] = BrickType::SnakeHead(self.board.facing);
         }
         let pos = self.board.find_valid_food_spawn().unwrap();
@@ -52,27 +133,26 @@ impl BoardBuilder {
         self.board
     }
 
-    fn add_bar(&mut self, bar: Bar) {
-        match bar.type_id {
+    fn add_bar(&mut self, line: String) -> Option<()> {
+        let mut iter = line.split_whitespace();
+        let bg = iter.next()?;
+        if bg.len() != 1 {
+            return None
+        }
+        let type_id: char = bg.chars().next()?;
+        match type_id {
             'W' => {
-                let mut pos = bar.pos;
-                for _ in 0..bar.len {
-                    self.board[pos] = BrickType::Wall;
-                    pos = pos.move_dir(bar.dir);
-                }
+                WallBar::from_line(&mut iter)?.apply(&mut self.board);
             },
             'S' => {
-                let mut pos = bar.pos;
-                for _ in 0..bar.len {
-                    self.board[pos] = BrickType::Snake(bar.dir);
-                    self.board.snake.push_front(pos);
-                    pos = pos.move_dir(bar.dir);
-                }
-                self.board.facing = bar.dir;
-                self.board.last_step = bar.dir;
+                SnakeBar::from_line(&mut iter)?.apply(&mut self.board);
+            },
+            'P' => {
+                PortalBar::from_line(&mut iter)?.apply(&mut self.board);
             },
             _ => {}
         };
+        Some(())
     }
 
     fn new(x_size: usize, y_size: usize) -> BoardBuilder {
@@ -96,8 +176,7 @@ pub fn from_file(file_path: &str) -> Option<Board> {
         if line.is_empty() {
             continue;
         }
-        let bar = Bar::from_line(line)?;
-        builder.add_bar(bar);
+        builder.add_bar(line);
     }
     Some(builder.build())
 }
