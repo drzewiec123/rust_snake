@@ -13,6 +13,33 @@ impl NcursesContext {
     pub fn get_visuals(&self) -> &VisualsRegistry {
         &self.visuals
     }
+
+    pub fn get_last_pressed_key(&self) -> Option<i32> {
+        ncurses::nodelay(ncurses::stdscr(), true);
+        let mut last_key = ncurses::ERR;
+        loop {
+            let key = ncurses::getch();
+            if key == ncurses::ERR {
+                break;
+            }
+            last_key = key;
+        }
+        if last_key == ncurses::ERR {
+            None
+        } else {
+            Some(last_key)
+        }
+    }
+
+    pub fn get_key(&self) -> i32 {
+        ncurses::nodelay(ncurses::stdscr(), false);
+        ncurses::getch()
+    }
+
+    pub fn clear_key_queue(&self) {
+        ncurses::nodelay(ncurses::stdscr(), true);        
+        while ncurses::getch() != ncurses::ERR {}
+    }
 }
 
 pub fn initialize() -> Option<NcursesContext> {
@@ -41,6 +68,19 @@ static _NEXT_FREE_COLOR_ID: AtomicI32 = AtomicI32::new(1);
 #[derive(Copy, Clone)]
 pub struct ColorPair {
     id: i16
+}
+
+pub struct Dimensions {
+    x: i32,
+    y: i32,
+    x_size: i32,
+    y_size: i32,
+}
+
+impl Dimensions {
+    pub fn new(x: i32, y: i32, x_size: i32, y_size: i32) -> Dimensions {
+        Dimensions{x, y, x_size, y_size}
+    }
 }
 
 impl ColorPair {
@@ -76,12 +116,21 @@ impl Attributes {
     }
 }
 
-impl std::ops::BitOr for Attributes {
+impl std::ops::BitOr<Attributes> for Attributes {
 
     type Output = Attributes;
 
     fn bitor(self, rhs: Self) -> Self::Output {
         Attributes{value: self.value | rhs.value}
+    }
+}
+
+impl std::ops::BitOr<u64> for Attributes {
+
+    type Output = Attributes;
+
+    fn bitor(self, rhs: u64) -> Self::Output {
+        Attributes{value: self.value | rhs}
     }
 }
 
@@ -97,14 +146,14 @@ impl PrintableCharacter {
 
 }
 
-pub struct Window {
+pub struct BasicWindow {
     win: WINDOW
 }
 
-impl Window {
+impl BasicWindow {
 
-    pub fn new(x: i32, y:i32, x_size: i32, y_size: i32) -> Window {
-        let w = Window { win: newwin(x_size, y_size, x, y) };
+    pub fn new(Dimensions { x, y, x_size, y_size }: Dimensions) -> BasicWindow {
+        let w = BasicWindow { win: newwin(x_size, y_size, x, y) };
         w
     }
 
@@ -151,8 +200,14 @@ impl Window {
 
 }
 
-impl Drop for Window {
+impl Drop for BasicWindow {
     fn drop(&mut self) {
         delwin(self.win);
     }
+}
+
+pub trait Window : {
+    fn refresh(&self);
+    fn draw(&self);
+    fn handle_keypress(&mut self, key: i32);
 }

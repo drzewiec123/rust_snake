@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::board::*;
-use crate::window::*;
+use crate::basic_window::*;
 
 pub struct VisualsRegistry {
     pub common_visuals: Rc<CommonVisuals>,
